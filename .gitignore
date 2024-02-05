@@ -1,4 +1,12 @@
-**/Data/
+/_pycache_
+/board
+/checkpoints
+/logs
+/model
+/monitor
+/wandb
+
+
 *.csv
 *.zip
 **/*.ipynb_checkpoints/
