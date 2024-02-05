@@ -5,7 +5,7 @@
 /model
 /monitor
 /wandb
-
+*.fmu
 
 *.csv
 *.zip
