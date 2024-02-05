@@ -93,7 +93,7 @@ class HEV(gym.Env):
 #             print(f'Initial SoC : {self.soc_init*100}')
         self.time_profile = np.arange(self.vehicle_speed_profile.shape[0])
         self.stop_time = self.vehicle_speed_profile.shape[0] - 1
-        self.state_init = np.array([self.soc_init, 0, 0, 0, 0, 0, 0], dtype=np.float32)
+        self.state_init = np.array([self.soc_init, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.float32)
         self.soc_base = 67/100
         self.state = self.state_init
         self.action_upper_bound = 20000
@@ -132,18 +132,19 @@ class HEV(gym.Env):
         instant_veh_speed = np.interp(self.time, self.time_profile, self.vehicle_speed_profile)
         self.fmu.setReal([self.vr_input1, self.vr_input2, self.vr_input3, self.vr_input4, self.vr_input5], [instant_veh_speed, soc_init, a1, a2, a3]) #input variable, input key(13500 2000)
         self.fmu.doStep(currentCommunicationPoint=self.time, communicationStepSize=self.step_size)
-        state = np.array(self.fmu.getReal(np.arange(37))) #5+32
-        state_column = np.array([self.vrs['Bat_SOC'], self.vrs['BSFC_g_kWh[1]'], self.vrs['NOX_OUT_MDL'], self.vrs['ObEng_nEng_Rpm'], self.vrs['TrItv_tqEng_Nm'], self.vrs['TrItv_tqP0_Nm'], self.vrs['TrItv_tqP2_Nm'], self.vrs['Driver_sVeh_kph']])
+        state = np.array(self.fmu.getReal(np.arange(39))) #5+32
+        state_column = np.array([self.vrs['Bat_SOC'], self.vrs['BSFC_g_kWh[1]'], self.vrs['NOX_AVG_WND'], self.vrs['NOX_COR_HOM'], self.vrs['NOX_OUT_MDL'], self.vrs['ObEng_nEng_Rpm'], self.vrs['TrItv_tqEng_Nm'], self.vrs['TrItv_tqP0_Nm'], self.vrs['TrItv_tqP2_Nm'], self.vrs['Driver_sVeh_kph']])
         self.state = state[state_column]
         soc = state[self.vrs['Bat_SOC']]/100
         BSFC = state[self.vrs['BSFC_g_kWh[1]']]/300
-        NOx = state[self.vrs['NOX_OUT_MDL']]/1
+        EURO = state[self.vrs['NOX_AVG_WND']]/100
+        NOx = state[self.vrs['NOX_OUT_MDL']]/2
         engine_speed = state[self.vrs['ObEng_nEng_Rpm']]/2500
         engine_torque = state[self.vrs['TrItv_tqEng_Nm']]/250
         P0_torque = state[self.vrs['TrItv_tqP0_Nm']]/30
         P2_torque = state[self.vrs['TrItv_tqP2_Nm']]/200
         vehicle_speed = state[self.vrs['Driver_sVeh_kph']]/100
-        self.state = np.array([soc, BSFC, engine_speed, engine_torque, P0_torque, P2_torque, vehicle_speed], dtype=np.float32)
+        self.state = np.array([soc, BSFC, EURO, NOx, engine_speed, engine_torque, P0_torque, P2_torque, vehicle_speed], dtype=np.float32)
         
         regulation = -2*(abs(self.soc_base - soc)>0.1)
         soc_reward = np.log(1 - abs(self.soc_base - soc))
@@ -152,7 +153,7 @@ class HEV(gym.Env):
         reward = self.alive_reward + soc_reward + bsfc_reward + nox_reward + regulation
         reward = self.reward_coeff * reward
         is_done = lambda time: time >= self.stop_time
-        info = state[np.array([self.vrs['Bat_SOC'], self.vrs['BSFC_g_kWh[1]'], self.vrs['NOX_OUT_MDL'], self.vrs['ObEng_nEng_Rpm'], self.vrs['TrItv_tqEng_Nm'], self.vrs['TrItv_tqP0_Nm'], self.vrs['TrItv_tqP2_Nm']])]
+        info = state[np.array([self.vrs['Bat_SOC'], self.vrs['BSFC_g_kWh[1]'], self.vrs['NOX_AVG_WND'], self.vrs['NOX_COR_HOM'], self.vrs['NOX_OUT_MDL'], self.vrs['ObEng_nEng_Rpm'], self.vrs['TrItv_tqEng_Nm'], self.vrs['TrItv_tqP0_Nm'], self.vrs['TrItv_tqP2_Nm']])]
         info = {
             "info": info
         }

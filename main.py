@@ -83,36 +83,47 @@ episodes = 10
 total_timesteps = batch_size*1
 env_id = "HEV"
 vec_env = DummyVecEnv([make_env(fmu_filename, project, name, monitor_dir, i) for i in range(num_cpu)])
-env = HEV(fmu_filename, test=True, start_time=0.0, step_size=1.0, SoC_coeff=10, BSFC_coeff=0.1, NOx_coeff=1, reward_coeff=1, state_coeff=1, alive_reward=1, project=project, name=name)
-eval_env = DummyVecEnv([lambda: Monitor(env, monitor_dir+f"_eval")])
 checkpoint_callback = CheckpointCallback(save_freq=1800, save_path=checkpoints_dir, name_prefix="rl_model")
+env = HEV(fmu_filename, test=True, start_time=0.0, step_size=1.0, SoC_coeff=10, BSFC_coeff=0.1, NOx_coeff=0.5, reward_coeff=1, state_coeff=1, alive_reward=1, project=project, name=name)
+eval_env = DummyVecEnv([lambda: Monitor(env, monitor_dir+f"_eval")])
 eval_callback = EvalCallback(eval_env, best_model_save_path=save_dir, log_path=log_dir, eval_freq=1800, deterministic=False, render=False)
 
 model = SAC("MlpPolicy", vec_env, verbose=1, device="cuda", batch_size=batch_size, gamma=gamma, learning_rate=learning_rate, tensorboard_log=board_dir)
 
+model.learn(total_timesteps = episodes*total_timesteps, callback = [checkpoint_callback, eval_callback])
+del model
 
-state = env.reset()
-action = np.array([0,0])
-done = False
-cum_reward = 0.0
-a_record = []
-r_record = []
-s_record = []
-t=0
-while not done:
-    next_state, reward, done, _, info = env.step(action)
-    cum_reward += reward
-    # a_record.append(np.array(action))
-    r_record.append(reward)
-    s_record.append(info)
-    state = next_state
-print(f"total reward: {cum_reward}")
 
-plt.plot(r_record)
-plt.show()
-# model.learn(total_timesteps = episodes*total_timesteps, callback = [checkpoint_callback, eval_callback])
-# del model
+best_model = SAC.load(os.path.join(save_dir, "best_model"))
+mean_reward, std_reward = evaluate_policy(best_model, eval_env, n_eval_episodes=10)
+print(f"Mean reward: {mean_reward} +/- {std_reward:.2f}")
 
-# best_model = SAC.load(os.path.join(save_dir, "model", "best_model"))
-# mean_reward, std_reward = evaluate_policy(best_model, eval_env, n_eval_episodes=10)
-# print(f"Mean reward: {mean_reward} +/- {std_reward:.2f}")
+
+
+# state = env.reset()
+# action = np.array([0,0])
+# done = False
+# cum_reward = 0.0
+# a_record = []
+# r_record = []
+# s_record = []
+# t=0
+# while not done:
+#     next_state, reward, done, _, info = env.step(action)
+#     cum_reward += reward
+#     # a_record.append(np.array(action))
+#     r_record.append(reward)
+#     s_record.append(next_state)
+#     state = next_state
+# print(f"total reward: {cum_reward}")
+# s_record = np.array(s_record)
+# print(np.sum(np.log(1 - abs(0.67 - s_record[:,0]))))
+# print(np.sum(0.1*s_record[:,1]))
+# print(np.sum(s_record[:,2]))
+# plt.plot(np.log(1 - abs(0.67 - s_record[:,0])), label='SoC')
+# plt.plot(0.1*s_record[:,1], label='BSFC')
+# plt.plot(s_record[:,2]/100, label='NOx_mgpkm')
+# plt.plot(s_record[:,4], label='NOx_AFT')
+# # plt.plot(r_record)
+# plt.legend(loc='best')
+# plt.show()
