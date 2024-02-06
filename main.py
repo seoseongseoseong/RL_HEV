@@ -52,7 +52,7 @@ name = 'SAC'
 cwd = os.getcwd()
 print(cwd)
 
-print(os.cpu_count())
+print(c)
 
 # GPU 준비
 USE_CUDA = torch.cuda.is_available()
