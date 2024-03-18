@@ -146,11 +146,11 @@ class HEV(gym.Env):
         vehicle_speed = state[self.vrs['Driver_sVeh_kph']]/100
         self.state = np.array([soc, BSFC, EURO, NOx, engine_speed, engine_torque, P0_torque, P2_torque, vehicle_speed], dtype=np.float32)
         
-        regulation = -2*(abs(self.soc_base - soc)>0.1)
+        limitation = -2*(abs(self.soc_base - soc)>0.1)
         soc_reward = np.log(1 - abs(self.soc_base - soc))
         bsfc_reward = - self.BSFC_coeff * BSFC
         nox_reward = - self.NOx_coeff * NOx
-        reward = self.alive_reward + soc_reward + bsfc_reward + nox_reward + regulation
+        reward = self.alive_reward + soc_reward + bsfc_reward + nox_reward + limitation
         reward = self.reward_coeff * reward
         is_done = lambda time: time >= self.stop_time
         info = state[np.array([self.vrs['Bat_SOC'], self.vrs['BSFC_g_kWh[1]'], self.vrs['NOX_AVG_WND'], self.vrs['NOX_COR_HOM'], self.vrs['NOX_OUT_MDL'], self.vrs['ObEng_nEng_Rpm'], self.vrs['TrItv_tqEng_Nm'], self.vrs['TrItv_tqP0_Nm'], self.vrs['TrItv_tqP2_Nm']])]
@@ -160,9 +160,18 @@ class HEV(gym.Env):
         self.time += self.step_size
         done = is_done(self.time)
         self.episode_reward += reward
+
+        wandb.log({
+            "reward": reward,
+            "SoC": soc_reward+limitation,
+            "BSFC": bsfc_reward,
+            "NOx": nox_reward,
+            "action1": action[0],
+            "action2": action[1],
+        })
         if done:
             wandb.log({
-                "reward": self.episode_reward,
+                "mean reward": self.episode_reward / self.stop_time,
             })
             self.episode_reward = 0
         return self.state*self.state_coeff, reward, done, done, info
@@ -178,11 +187,11 @@ class HEV(gym.Env):
         if self.test:
             self.vehicle_speed_profile =  np.array(pd.read_csv(profile_name))[:,0]
             self.soc_init = 67/100
-            print(f'Initial SoC : {self.soc_init*100}')
+            # print(f'Initial SoC : {self.soc_init*100}')
         else:
             self.vehicle_speed_profile = make_profile()
             self.soc_init = random.uniform(57, 77)/100
-            print(f'Initial SoC : {self.soc_init*100}')
+            # print(f'Initial SoC : {self.soc_init*100}')
         self.time_profile = np.arange(self.vehicle_speed_profile.shape[0])
         self.stop_time = self.vehicle_speed_profile.shape[0] - 1
 
@@ -221,7 +230,7 @@ def seed_everything(seed: int = 42):
 
 def make_env(fmu_filename, project, name, monitor_dir, seed: int = 0):
     def _init():
-        env = HEV(fmu_filename, test=True, start_time=0.0, step_size=1.0, SoC_coeff=10, BSFC_coeff=0.1, NOx_coeff=1, reward_coeff=1, state_coeff=1, alive_reward=1, project=project, name=name)
+        env = HEV(fmu_filename, test=True, start_time=0.0, step_size=1.0, SoC_coeff=10, BSFC_coeff=0.1, NOx_coeff=0.1, reward_coeff=0.5, state_coeff=1, alive_reward=1, project=project, name=name)
         env = Monitor(env, monitor_dir)
         env.reset()
         return env

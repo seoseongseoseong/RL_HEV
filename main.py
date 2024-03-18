@@ -22,6 +22,7 @@ import wandb
 
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3 import PPO, SAC
+from sb3_contrib import RecurrentPPO
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 from stable_baselines3.common.env_util import make_vec_env
@@ -47,12 +48,12 @@ import tensorflow
 from env import *
 from utils import *
 
-project = 'SAC_0129'
+project = 'SAC_0307'
 name = 'SAC'
 cwd = os.getcwd()
 print(cwd)
 
-print(c)
+print("cpu available:", os.cpu_count())
 
 # GPU 준비
 USE_CUDA = torch.cuda.is_available()
@@ -66,29 +67,32 @@ fmu_filename = 'HEV_TMED_Simulator_WLTC_231005_Check.fmu'
 fmu_name = 'HEV_TMED_Simulator_WLTC_231005_Check'
 start_time = 0.0
 stop_time = 1800.0
-step_size = 0.01
+step_size = 1
 soc_init = 67
 profile_name = 'wltp_1Hz.csv'
-
+buffer_size = 50000
+learning_starts = 100
+tau = 0.005
 gamma = 0.99
-batch_size = 2048
-learning_rate = 5e-5
+batch_size = 256
+learning_rate = 5e-6
 save_dir = f'./model/{project}/'
 monitor_dir = f'./monitor/{project}/'
 checkpoints_dir = f'./checkpoints/{project}/'
 log_dir = f'./logs/{project}/'
 board_dir = f'./board/{project}/'
-num_cpu = 4
-episodes = 1000
-total_timesteps = batch_size*1
+num_cpu = 1 #os.cpu_count()
+episodes = 10000
+total_timesteps = int(stop_time)*1
 env_id = "HEV"
 vec_env = DummyVecEnv([make_env(fmu_filename, project, name, monitor_dir, i) for i in range(num_cpu)])
 checkpoint_callback = CheckpointCallback(save_freq=1800, save_path=checkpoints_dir, name_prefix="rl_model")
-env = HEV(fmu_filename, test=True, start_time=0.0, step_size=1.0, SoC_coeff=10, BSFC_coeff=0.1, NOx_coeff=0.5, reward_coeff=1, state_coeff=1, alive_reward=1, project=project, name=name)
+env = HEV(fmu_filename, test=True, start_time=0.0, step_size=1.0, SoC_coeff=10, BSFC_coeff=0.1, NOx_coeff=0.1, reward_coeff=0.5, state_coeff=1, alive_reward=1, project=project, name=name)
 eval_env = DummyVecEnv([lambda: Monitor(env, monitor_dir+f"_eval")])
-eval_callback = EvalCallback(eval_env, best_model_save_path=save_dir, log_path=log_dir, eval_freq=1800, deterministic=False, render=False)
+eval_callback = EvalCallback(eval_env, best_model_save_path=save_dir, log_path=log_dir, eval_freq=batch_size*1000, deterministic=False, render=False)
 
-model = SAC("MlpPolicy", vec_env, verbose=1, device="cuda", batch_size=batch_size, gamma=gamma, learning_rate=learning_rate, tensorboard_log=board_dir)
+model = SAC("MlpPolicy", vec_env, buffer_size=buffer_size, learning_starts=learning_starts, verbose=1, device="cuda", batch_size=batch_size, tau=tau, gamma=gamma, learning_rate=learning_rate, tensorboard_log=board_dir)
+# model = RecurrentPPO("MlpLstmPolicy", vec_env, verbose=1, device="cuda", batch_size=batch_size, gamma=gamma, learning_rate=learning_rate)
 
 model.learn(total_timesteps = episodes*total_timesteps, callback = [checkpoint_callback, eval_callback])
 del model
