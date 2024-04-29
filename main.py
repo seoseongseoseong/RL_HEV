@@ -24,7 +24,7 @@ from stable_baselines3.common.env_checker import check_env
 from stable_baselines3 import PPO, SAC
 from sb3_contrib import RecurrentPPO
 from stable_baselines3.common.monitor import Monitor
-from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecNormalize
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common import results_plotter
 from stable_baselines3.common.utils import set_random_seed
@@ -49,6 +49,14 @@ from env import *
 from utils import *
 
 os.system('cls')
+
+parser = argparse.ArgumentParser(description='Process learning rate and batch size.')
+parser.add_argument('--learning_rate', type=float, default=4e-5, help='Learning rate for the model')
+parser.add_argument('--batch_size', type=int, default=256, help='Batch size for training')
+args = parser.parse_args()
+
+learning_rate = args.learning_rate
+batch_size = args.batch_size
 
 project = 'SAC_0423'
 name = 'SAC'
@@ -79,20 +87,19 @@ NOx_coeff = 0.1
 reward_coeff = 0.5
 state_coeff = 1
 alive_reward = 1
-
 profile_name = 'wltp_1Hz.csv'
 buffer_size = 50000
 learning_starts = 100
 tau = 0.005
-gamma = 1 #0.99
-batch_size = 8
+gamma = 0.99
+batch_size = 4096
 learning_rate = 5e-4
 save_dir = f'./model/{project}/'
 monitor_dir = f'./monitor/{project}/'
 checkpoints_dir = f'./checkpoints/{project}/'
 log_dir = f'./logs/{project}/'
 board_dir = f'./board/{project}/'
-num_cpu = os.cpu_count()
+num_cpu = 1 #os.cpu_count()
 episodes = 10000
 total_timesteps = int(stop_time)*1
 env_id = "HEV"
@@ -100,11 +107,13 @@ config = {"gamma": gamma, "batch_size": batch_size, "learning_rate": learning_ra
 
 vec_env = DummyVecEnv([make_env(fmu_filename, test_learn, start_time, step_size, SoC_coeff, BSFC_coeff, NOx_coeff, reward_coeff, state_coeff, alive_reward, 
                                 project, name, config, monitor_dir, i) for i in range(num_cpu)])
+vec_env = VecNormalize(vec_env, norm_obs=True, norm_reward=True, clip_obs=10.0, clip_reward=10.0, gamma=gamma, epsilon=1e-08)
 checkpoint_callback = CheckpointCallback(save_freq=1800, save_path=checkpoints_dir, name_prefix="rl_model")
 env = HEV(fmu_filename=fmu_filename, test=test_eval, start_time=start_time, step_size=step_size, 
             SoC_coeff=SoC_coeff, BSFC_coeff=BSFC_coeff, NOx_coeff=NOx_coeff, reward_coeff=reward_coeff, state_coeff=state_coeff, alive_reward=alive_reward, 
             project=project, name=name, config=config)
 eval_env = DummyVecEnv([lambda: Monitor(env, monitor_dir+f"_eval")])
+eval_env = VecNormalize(eval_env, norm_obs=True, norm_reward=False, clip_obs=10.0, clip_reward=10.0, gamma=gamma, epsilon=1e-08)
 eval_callback = EvalCallback(eval_env, best_model_save_path=save_dir, log_path=log_dir, eval_freq=batch_size*1000, deterministic=False, render=False)
 
 model = SAC("MlpPolicy", vec_env, buffer_size=buffer_size, learning_starts=learning_starts, verbose=1, device="cuda", batch_size=batch_size, tau=tau, gamma=gamma, learning_rate=learning_rate, tensorboard_log=board_dir)
@@ -114,9 +123,9 @@ model.learn(total_timesteps = episodes*total_timesteps, callback = [checkpoint_c
 del model
 
 
-# best_model = SAC.load(os.path.join(save_dir, "best_model"))
-# mean_reward, std_reward = evaluate_policy(best_model, eval_env, n_eval_episodes=10)
-# print(f"Mean reward: {mean_reward} +/- {std_reward:.2f}")
+best_model = SAC.load(os.path.join(save_dir, "best_model"))
+mean_reward, std_reward = evaluate_policy(best_model, eval_env, n_eval_episodes=10)
+print(f"Mean reward: {mean_reward} +/- {std_reward:.2f}")
 
 
 
