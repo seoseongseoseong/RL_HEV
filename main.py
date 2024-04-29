@@ -48,7 +48,9 @@ import tensorflow
 from env import *
 from utils import *
 
-project = 'SAC_0307'
+os.system('cls')
+
+project = 'SAC_0423'
 name = 'SAC'
 cwd = os.getcwd()
 print(cwd)
@@ -65,29 +67,43 @@ seed_everything(seed=42)
 
 fmu_filename = 'HEV_TMED_Simulator_WLTC_231005_Check.fmu'
 fmu_name = 'HEV_TMED_Simulator_WLTC_231005_Check'
+test_learn = True
+test_eval = True
 start_time = 0.0
 stop_time = 1800.0
 step_size = 1
 soc_init = 67
+SoC_coeff = 10
+BSFC_coeff = 0.1
+NOx_coeff = 0.1
+reward_coeff = 0.5
+state_coeff = 1
+alive_reward = 1
+
 profile_name = 'wltp_1Hz.csv'
 buffer_size = 50000
 learning_starts = 100
 tau = 0.005
-gamma = 0.99
-batch_size = 256
-learning_rate = 5e-6
+gamma = 1 #0.99
+batch_size = 8
+learning_rate = 5e-4
 save_dir = f'./model/{project}/'
 monitor_dir = f'./monitor/{project}/'
 checkpoints_dir = f'./checkpoints/{project}/'
 log_dir = f'./logs/{project}/'
 board_dir = f'./board/{project}/'
-num_cpu = 1 #os.cpu_count()
+num_cpu = os.cpu_count()
 episodes = 10000
 total_timesteps = int(stop_time)*1
 env_id = "HEV"
-vec_env = DummyVecEnv([make_env(fmu_filename, project, name, monitor_dir, i) for i in range(num_cpu)])
+config = {"gamma": gamma, "batch_size": batch_size, "learning_rate": learning_rate}
+
+vec_env = DummyVecEnv([make_env(fmu_filename, test_learn, start_time, step_size, SoC_coeff, BSFC_coeff, NOx_coeff, reward_coeff, state_coeff, alive_reward, 
+                                project, name, config, monitor_dir, i) for i in range(num_cpu)])
 checkpoint_callback = CheckpointCallback(save_freq=1800, save_path=checkpoints_dir, name_prefix="rl_model")
-env = HEV(fmu_filename, test=True, start_time=0.0, step_size=1.0, SoC_coeff=10, BSFC_coeff=0.1, NOx_coeff=0.1, reward_coeff=0.5, state_coeff=1, alive_reward=1, project=project, name=name)
+env = HEV(fmu_filename=fmu_filename, test=test_eval, start_time=start_time, step_size=step_size, 
+            SoC_coeff=SoC_coeff, BSFC_coeff=BSFC_coeff, NOx_coeff=NOx_coeff, reward_coeff=reward_coeff, state_coeff=state_coeff, alive_reward=alive_reward, 
+            project=project, name=name, config=config)
 eval_env = DummyVecEnv([lambda: Monitor(env, monitor_dir+f"_eval")])
 eval_callback = EvalCallback(eval_env, best_model_save_path=save_dir, log_path=log_dir, eval_freq=batch_size*1000, deterministic=False, render=False)
 
@@ -98,9 +114,11 @@ model.learn(total_timesteps = episodes*total_timesteps, callback = [checkpoint_c
 del model
 
 
-best_model = SAC.load(os.path.join(save_dir, "best_model"))
-mean_reward, std_reward = evaluate_policy(best_model, eval_env, n_eval_episodes=10)
-print(f"Mean reward: {mean_reward} +/- {std_reward:.2f}")
+# best_model = SAC.load(os.path.join(save_dir, "best_model"))
+# mean_reward, std_reward = evaluate_policy(best_model, eval_env, n_eval_episodes=10)
+# print(f"Mean reward: {mean_reward} +/- {std_reward:.2f}")
+
+
 
 
 

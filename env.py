@@ -69,7 +69,7 @@ class HEV(gym.Env):
                 ):
         super(HEV, self).__init__()
         self.fmu_filename = fmu_filename
-        self.vrs = {}
+        self.test = test
         self.start_time = start_time
         self.step_size = step_size
         self.SoC_coeff = SoC_coeff
@@ -79,10 +79,9 @@ class HEV(gym.Env):
         self.state_coeff = state_coeff
         self.alive_reward = alive_reward
         self.time = self.start_time
-        self.test = test
-        self.config = config
         self.project = project
         self.name = name
+        self.config = config
         if self.test:
             self.vehicle_speed_profile =  np.array(pd.read_csv(profile_name))[:,0]
             self.soc_init = 67/100
@@ -101,6 +100,7 @@ class HEV(gym.Env):
         #self.action_space = [[13500, 2000], [500, 2000], [13500, -15000], [500, -15000]]
         self.actsize = 2
         self.obssize = len(self.state)
+        self.vrs = {}
         model_description = read_model_description(self.fmu_filename)
         for variable in model_description.modelVariables:
             self.vrs[variable.name] = variable.valueReference
@@ -228,10 +228,13 @@ def seed_everything(seed: int = 42):
     torch.backends.cudnn.deterministic = True  # type: ignore
     torch.backends.cudnn.benchmark = True  # type: ignore
 
-def make_env(fmu_filename, project, name, monitor_dir, seed: int = 0):
+def make_env(fmu_filename, test=False, start_time=0.0, step_size=1.0, 
+             SoC_coeff=10, BSFC_coeff=0.1, NOx_coeff=0.1, reward_coeff=0.5, state_coeff=1, alive_reward=1, 
+             project='SAC', name='SAC', config = {"gamma": 0.999, "batch_size": 2048, "learning_rate": 0.0003}, monitor_dir=f'./monitor/{SAC}/', seed: int = 0):
     def _init():
-        env = HEV(fmu_filename, test=True, start_time=0.0, step_size=1.0, SoC_coeff=10, BSFC_coeff=0.1, NOx_coeff=0.1, reward_coeff=0.5, state_coeff=1, alive_reward=1, project=project, name=name)
-        env = Monitor(env, monitor_dir)
+        env = HEV(fmu_filename=fmu_filename, test=test, start_time=start_time, step_size=step_size, 
+                  SoC_coeff=SoC_coeff, BSFC_coeff=BSFC_coeff, NOx_coeff=NOx_coeff, reward_coeff=reward_coeff, state_coeff=state_coeff, alive_reward=alive_reward, 
+                  project=project, name=name, config=config)
         env.reset()
         return env
     set_random_seed(seed)

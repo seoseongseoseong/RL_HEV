@@ -1,0 +1,11 @@
+**/Data/
+*.csv
+*.zip
+**/*.ipynb_checkpoints/
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+*.pt
+
+# MAC
+.DS_Store
+*.DS_Store
