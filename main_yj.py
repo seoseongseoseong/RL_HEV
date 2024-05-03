@@ -50,12 +50,13 @@ from env import *
 
 os.system('cls')
 
-# parser = argparse.ArgumentParser(description='Train SAC model with specified parameters')
-# parser.add_argument('--ent_coef', type=str, default='auto_1e-5', help='entropy coefficient')
-# parser.add_argument('--learning_rate', type=float, default=5e-4, help='learning rate')
-# parser.add_argument('--batch_size', type=int, default=16, help='batch size')
-# parser.add_argument('--tau', type=float, default=0.005, help='tau value')
-# args = parser.parse_args()
+parser = argparse.ArgumentParser(description='Train SAC model with specified parameters')
+parser.add_argument('--ent_coef', type=str, default='auto_1e-5', help='entropy coefficient')
+parser.add_argument('--learning_rate', type=float, default=5e-4, help='learning rate')
+parser.add_argument('--batch_size', type=int, default=16, help='batch size')
+parser.add_argument('--tau', type=float, default=0.005, help='tau value')
+parser.add_argument('--gamma', type=float, default=0.99, help='gamma value')
+args = parser.parse_args()
 
 project = 'SAC_0423'
 name = 'SAC'
@@ -90,12 +91,12 @@ state_coeff = 1
 alive_reward = 1
 profile_name = 'wltp_1Hz.csv'
 buffer_size = 50000
-ent_coef= 'auto_1e-5'
+ent_coef= args.ent_coeff
 learning_starts = 100
-tau = 0.005
-gamma = 0.99
-learning_rate = 5e-5
-batch_size = 256
+tau = args.tau
+gamma = args.gamma
+learning_rate = args.learning_rate
+batch_size = args.batch_size
 save_dir = f'./model/{project}/'
 monitor_dir = f'./monitor/{project}/'
 checkpoints_dir = f'./checkpoints/{project}/'

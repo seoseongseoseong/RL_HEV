@@ -63,15 +63,17 @@ def make_profile():
 
 profile_name = 'wltp_1Hz.csv'
 class HEV(gym.Env):
-    def __init__(self, fmu_filename, test=False, start_time=0.0, step_size=0.01, 
-                 SoC_coeff=5, BSFC_coeff=0.1, NOx_coeff=1, reward_coeff=1, state_coeff=1, alive_reward=1, project="PPO", name="PPO",
+    def __init__(self, fmu_filename, log=True, test=False, start_time=0.0, step_size=0.01, 
+                 limitation_coeff=2, SoC_coeff=5, BSFC_coeff=0.1, NOx_coeff=1, reward_coeff=1, state_coeff=1, alive_reward=1, project="PPO", name="PPO",
                  config = {"gamma": 0.999, "batch_size": 2048, "learning_rate": 0.0003}
                 ):
         super(HEV, self).__init__()
         self.fmu_filename = fmu_filename
+        self.log = log
         self.test = test
         self.start_time = start_time
         self.step_size = step_size
+        self.limitation_coeff = limitation_coeff
         self.SoC_coeff = SoC_coeff
         self.BSFC_coeff = BSFC_coeff
         self.NOx_coeff = NOx_coeff
@@ -101,13 +103,18 @@ class HEV(gym.Env):
         self.actsize = 2
         self.obssize = len(self.state)
         self.vrs = {}
-        model_description = read_model_description(self.fmu_filename)
-        for variable in model_description.modelVariables:
+        self.model_description = read_model_description(self.fmu_filename)
+        for variable in self.model_description.modelVariables:
             self.vrs[variable.name] = variable.valueReference
-        unzipdir = extract(fmu_filename)
-        self.fmu = FMU2Slave(guid=model_description.guid,
-                       unzipDirectory=unzipdir,
-                       modelIdentifier=model_description.coSimulation.modelIdentifier,
+        self.vr_input1 = self.vrs['Driver_sVeh_Target_kph']
+        self.vr_input2 = self.vrs['SOC_init']
+        self.vr_input3 = self.vrs['Engine_on_line']
+        self.vr_input4 = self.vrs['Engine_off_line']
+        self.vr_input5 = self.vrs['Engine_OOL']
+        self.unzipdir = extract(self.fmu_filename)
+        self.fmu = FMU2Slave(guid=self.model_description.guid,
+                       unzipDirectory=self.unzipdir,
+                       modelIdentifier=self.model_description.coSimulation.modelIdentifier,
                        instanceName='instance1')
         
         self.action_space = spaces.Box(low=-1, high=1, shape=(self.actsize, ), dtype=np.float32)
@@ -116,11 +123,12 @@ class HEV(gym.Env):
         self.render_mode = None
         self.reward_range = (-2, 2)
         self.spec = None
-        wandb.init(
-            project=self.project,
-            name=self.name,
-            config=self.config
-            )
+        if self.log:
+            wandb.init(
+                project=self.project,
+                name=self.name,
+                config=self.config
+                )
         self.episode_reward = 0
 
     def step(self, action):
@@ -146,7 +154,7 @@ class HEV(gym.Env):
         vehicle_speed = state[self.vrs['Driver_sVeh_kph']]/100
         self.state = np.array([soc, BSFC, EURO, NOx, engine_speed, engine_torque, P0_torque, P2_torque, vehicle_speed], dtype=np.float32)
         
-        limitation = -2*(abs(self.soc_base - soc)>0.1)
+        limitation = -self.limitation_coeff*(abs(self.soc_base - soc)>0.1)
         soc_reward = np.log(1 - abs(self.soc_base - soc))
         bsfc_reward = - self.BSFC_coeff * BSFC
         nox_reward = - self.NOx_coeff * NOx
@@ -160,20 +168,20 @@ class HEV(gym.Env):
         self.time += self.step_size
         done = is_done(self.time)
         self.episode_reward += reward
-
-        wandb.log({
-            "reward": reward,
-            "SoC": soc_reward+limitation,
-            "BSFC": bsfc_reward,
-            "NOx": nox_reward,
-            "action1": action[0],
-            "action2": action[1],
-        })
-        if done:
+        if self.log:
             wandb.log({
-                "mean reward": self.episode_reward / self.stop_time,
+                "reward": reward,
+                "SoC": soc_reward+limitation,
+                "BSFC": bsfc_reward,
+                "NOx": nox_reward,
+                "action1": action[0],
+                "action2": action[1],
             })
-            self.episode_reward = 0
+            if done:
+                wandb.log({
+                    "mean reward": self.episode_reward / self.stop_time,
+                })
+                self.episode_reward = 0
         return self.state*self.state_coeff, reward, done, done, info
 
     def reset(self, seed=None, options=None):
@@ -195,14 +203,12 @@ class HEV(gym.Env):
         self.time_profile = np.arange(self.vehicle_speed_profile.shape[0])
         self.stop_time = self.vehicle_speed_profile.shape[0] - 1
 
-        self.vr_input1 = self.vrs['Driver_sVeh_Target_kph']
-        self.vr_input2 = self.vrs['SOC_init']
-        self.vr_input3 = self.vrs['Engine_on_line']
-        self.vr_input4 = self.vrs['Engine_off_line']
-        self.vr_input5 = self.vrs['Engine_OOL']
+        # self.step(np.array([1,0]))
 
-        info = {}
-        return self.state, info
+        info = {
+            "info": 'env reset'
+        }
+        return self.state*self.state_coeff, info
     
     def render(self):
         pass
@@ -228,12 +234,12 @@ def seed_everything(seed: int = 42):
     torch.backends.cudnn.deterministic = True  # type: ignore
     torch.backends.cudnn.benchmark = True  # type: ignore
 
-def make_env(fmu_filename, test=False, start_time=0.0, step_size=1.0, 
-             SoC_coeff=10, BSFC_coeff=0.1, NOx_coeff=0.1, reward_coeff=0.5, state_coeff=1, alive_reward=1, 
+def make_env(fmu_filename, log=True, test=False, start_time=0.0, step_size=1.0, 
+             limitation_coeff=2, SoC_coeff=10, BSFC_coeff=0.1, NOx_coeff=0.1, reward_coeff=0.5, state_coeff=1, alive_reward=1, 
              project='SAC', name='SAC', config = {"gamma": 0.999, "batch_size": 2048, "learning_rate": 0.0003}, monitor_dir=f'./monitor/{SAC}/', seed: int = 0):
     def _init():
-        env = HEV(fmu_filename=fmu_filename, test=test, start_time=start_time, step_size=step_size, 
-                  SoC_coeff=SoC_coeff, BSFC_coeff=BSFC_coeff, NOx_coeff=NOx_coeff, reward_coeff=reward_coeff, state_coeff=state_coeff, alive_reward=alive_reward, 
+        env = HEV(fmu_filename=fmu_filename, log=log, test=test, start_time=start_time, step_size=step_size, 
+                  limitation_coeff=limitation_coeff ,SoC_coeff=SoC_coeff, BSFC_coeff=BSFC_coeff, NOx_coeff=NOx_coeff, reward_coeff=reward_coeff, state_coeff=state_coeff, alive_reward=alive_reward, 
                   project=project, name=name, config=config)
         env.reset()
         return env
