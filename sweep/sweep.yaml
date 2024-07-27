@@ -1,0 +1,26 @@
+program: train.py  # 실행할 메인 파일
+method: bayes  # Bayesian Optimization 사용
+metric:
+  name: mean_reward
+  goal: maximize
+parameters:
+  learning_rate:
+    distribution: uniform
+    min: 1e-5
+    max: 1e-3
+  batch_size:
+    distribution: categorical
+    values: [1024, 2048, 4096]
+  gamma:
+    distribution: uniform
+    min: 0.9
+    max: 0.999
+  tau:
+    distribution: uniform
+    min: 0.001
+    max: 0.01
+  ent_coef:
+    distribution: uniform
+    min: 1e-6
+    max: 1e-4
+    

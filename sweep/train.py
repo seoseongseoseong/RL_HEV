@@ -49,37 +49,35 @@ import tensorflow
 from env import *
 # from utils import *
 
-wandb.login(key='422d68c2bfc6b00321a1d817faf818d5e03059b3')
-
 os.system('cls')
 
-parser = argparse.ArgumentParser(description='Train SAC model with specified parameters')
-parser.add_argument('--ent_coef', type=float, default=1e-5, help='entropy coefficient')
-parser.add_argument('--learning_rate', type=float, default=5e-4, help='learning rate')
-parser.add_argument('--batch_size', type=int, default=4096, help='batch size')
-parser.add_argument('--tau', type=float, default=0.005, help='tau value')
-parser.add_argument('--gamma', type=float, default=0.99, help='gamma value')
-args = parser.parse_args()
+# parser = argparse.ArgumentParser(description='Train SAC model with specified parameters')
+# parser.add_argument('--ent_coef', type=str, default='auto_1e-5', help='entropy coefficient')
+# parser.add_argument('--learning_rate', type=float, default=5e-4, help='learning rate')
+# parser.add_argument('--batch_size', type=int, default=16, help='batch size')
+# parser.add_argument('--tau', type=float, default=0.005, help='tau value')
+# args = parser.parse_args()
 
-project = 'SAC_HPC'
+
+project = 'SAC_sweep'
 name = 'SAC'
 cwd = os.getcwd()
 print(cwd)
 
-# print("cpu available:", os.cpu_count())
+print("cpu available:", os.cpu_count())
 
 # GPU 준비
-# USE_CUDA = torch.cuda.is_available()
-# dev = torch.device("cuda:0" if USE_CUDA else "cpu")
-# print("Using Device:", dev)
-# torch.cuda.empty_cache()
+USE_CUDA = torch.cuda.is_available()
+dev = torch.device("cuda:0" if USE_CUDA else "cpu")
+print("Using Device:", dev)
+torch.cuda.empty_cache()
 
 seed_everything(seed=42)
 
 fmu_filename = 'HEV_TMED_Simulator_WLTC_231005_Check.fmu'
 fmu_name = 'HEV_TMED_Simulator_WLTC_231005_Check'
 log = True
-save = False
+save = True
 test_learn = True
 test_eval = True
 start_time = 0.0
@@ -95,12 +93,12 @@ state_coeff = 1
 alive_reward = 1
 profile_name = 'wltp_1Hz.csv'
 buffer_size = 50000
-ent_coef= args.ent_coef
+ent_coef= 1e-5
 learning_starts = 100
-tau = args.tau
-gamma = args.gamma
-learning_rate = args.learning_rate
-batch_size = args.batch_size
+tau = 0.005
+gamma = 0.99
+learning_rate = 5e-5
+batch_size = 4096
 verbose = 1
 device = 'cpu'
 policy_kwargs = dict(net_arch=[64, 32])
@@ -115,28 +113,43 @@ total_timesteps = int(stop_time)*1
 env_id = "HEV"
 config = {"gamma": gamma, "tau": tau, "batch_size": batch_size, "learning_rate": learning_rate, "ent_coef": ent_coef}
 
-# vec_env = DummyVecEnv([make_env(fmu_filename, log, test_learn, start_time, step_size, limitation_coeff, SoC_coeff, BSFC_coeff, NOx_coeff, reward_coeff, state_coeff, alive_reward, 
-#                                 project, name, config, monitor_dir, i) for i in range(num_cpu)])
+if log:
+    wandb.init(
+        project=project,
+        name=name,
+        )
+config = wandb.config
+learning_rate=config.learning_rate, 
+batch_size=config.batch_size, 
+gamma=config.gamma, 
+tau=config.tau, 
+ent_coef=config.ent_coef, 
+
+vec_env = DummyVecEnv([make_env(fmu_filename, log, test_learn, start_time, step_size, limitation_coeff, SoC_coeff, BSFC_coeff, NOx_coeff, reward_coeff, state_coeff, alive_reward, 
+                                project, name, config, monitor_dir, i) for i in range(num_cpu)])
 # vec_env = VecNormalize(vec_env, norm_obs=True, norm_reward=False, clip_obs=10.0, clip_reward=10.0, gamma=gamma, epsilon=1e-08)
-# checkpoint_callback = CheckpointCallback(save_freq=1800, save_path=checkpoints_dir, name_prefix="rl_model")
+checkpoint_callback = CheckpointCallback(save_freq=1800, save_path=checkpoints_dir, name_prefix="rl_model")
 env = HEV(fmu_filename=fmu_filename, log=log, test=test_eval, start_time=start_time, step_size=step_size, 
             limitation_coeff=limitation_coeff, SoC_coeff=SoC_coeff, BSFC_coeff=BSFC_coeff, NOx_coeff=NOx_coeff, reward_coeff=reward_coeff, state_coeff=state_coeff, alive_reward=alive_reward, 
             project=project, name=name, config=config)
-# eval_env = DummyVecEnv([lambda: Monitor(env, monitor_dir+f"_eval")])
-# # eval_env = VecNormalize(eval_env, norm_obs=True, norm_reward=False, clip_obs=10.0, clip_reward=10.0, gamma=gamma, epsilon=1e-08)
-# eval_callback = EvalCallback(eval_env, best_model_save_path=save_dir, log_path=log_dir, eval_freq=stop_time*1000, deterministic=True, render=False)
+eval_env = DummyVecEnv([lambda: Monitor(env, monitor_dir+f"_eval")])
+# eval_env = VecNormalize(eval_env, norm_obs=True, norm_reward=False, clip_obs=10.0, clip_reward=10.0, gamma=gamma, epsilon=1e-08)
+eval_callback = EvalCallback(eval_env, best_model_save_path=save_dir, log_path=log_dir, eval_freq=stop_time*1000, deterministic=True, render=False)
 
-model = SAC("MlpPolicy", env, buffer_size=buffer_size, learning_starts=learning_starts, ent_coef=ent_coef, verbose=verbose, 
+model = SAC("MlpPolicy", vec_env, buffer_size=buffer_size, learning_starts=learning_starts, ent_coef=ent_coef, verbose=verbose, 
             device=device, batch_size=batch_size, tau=tau, gamma=gamma, learning_rate=learning_rate, tensorboard_log=board_dir, policy_kwargs=policy_kwargs)
 # model = RecurrentPPO("MlpLstmPolicy", vec_env, verbose=1, device="cuda", batch_size=batch_size, gamma=gamma, learning_rate=learning_rate)
-# if save:
-#     callbacks = [checkpoint_callback, eval_callback, WandbCallback()]
-# else:
-#     callbacks = WandbCallback()
-model.learn(total_timesteps = episodes*total_timesteps, callback = WandbCallback())
+if save:
+    callbacks = [checkpoint_callback, eval_callback]
+else:
+    callbacks = WandbCallback()
+model.learn(total_timesteps = episodes*total_timesteps, callback = callbacks)
 del model
 
 
-# best_model = SAC.load(os.path.join(save_dir, "best_model"))
-# mean_reward, std_reward = evaluate_policy(best_model, eval_env, n_eval_episodes=10)
-# print(f"Mean reward: {mean_reward} +/- {std_reward:.2f}")
+best_model = SAC.load(os.path.join(save_dir, "best_model"))
+mean_reward, std_reward = evaluate_policy(best_model, eval_env, n_eval_episodes=10)
+print(f"Mean reward: {mean_reward} +/- {std_reward:.2f}")
+
+wandb.finish()
+

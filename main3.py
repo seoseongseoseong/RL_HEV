@@ -21,7 +21,9 @@ from gymnasium import spaces
 import wandb
 
 from stable_baselines3.common.env_checker import check_env
-from stable_baselines3 import PPO, SAC
+from stable_baselines3 import PPO, SAC, TD3
+from stable_baselines3.td3.policies import TD3Policy
+from stable_baselines3.common.noise import NormalActionNoise, OrnsteinUhlenbeckActionNoise
 from sb3_contrib import RecurrentPPO
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecNormalize
@@ -47,6 +49,7 @@ from torch.utils.data import Dataset, TensorDataset, DataLoader
 import tensorflow
 
 from env import *
+from policy import *
 # from utils import *
 
 os.system('cls')
@@ -58,9 +61,8 @@ os.system('cls')
 # parser.add_argument('--tau', type=float, default=0.005, help='tau value')
 # args = parser.parse_args()
 
-
-project = 'SAC'
-name = 'SAC'
+project = 'PPO'
+name = 'PPO'
 cwd = os.getcwd()
 print(cwd)
 
@@ -92,26 +94,44 @@ reward_coeff = 1
 state_coeff = 1
 alive_reward = 1
 profile_name = 'wltp_1Hz.csv'
-buffer_size = 100000
-ent_coef= 'auto'
-learning_starts = 10000
-tau = 0.005
-gamma = 1 #0.99
-learning_rate = 5e-4
 
-batch_size = 256
-verbose = 1
-device = "cpu"
 save_dir = f'./model/{project}/'
 monitor_dir = f'./monitor/{project}/'
 checkpoints_dir = f'./checkpoints/{project}/'
 log_dir = f'./logs/{project}/'
 board_dir = f'./board/{project}/'
-num_cpu = 1 #os.cpu_count()
-episodes = 1000
-total_timesteps = int(stop_time)*1
+num_cpu = 1
 env_id = "HEV"
-config = {"gamma": gamma, "tau": tau, "batch_size": batch_size, "learning_rate": learning_rate, "ent_coef": ent_coef}
+
+n_actions = 1
+learning_rate=5e-5
+n_steps=1800
+batch_size=180
+n_epochs=10
+gamma=0.99
+gae_lambda=0.97
+clip_range=0.1
+clip_range_vf=None
+normalize_advantage=False
+ent_coef=1e-5
+vf_coef=0.005
+max_grad_norm=0.1
+use_sde=False
+sde_sample_freq=-1
+rollout_buffer_class=None
+rollout_buffer_kwargs=None
+target_kl=None
+stats_window_size=100
+tensorboard_log=None
+policy_kwargs=None
+verbose=1
+seed=None
+device='auto'
+_init_setup_model=True
+episodes = 5000
+total_timesteps = int(stop_time)*1
+
+config = {"gamma": gamma, "clip": clip_range, "batch_size": batch_size, "learning_rate": learning_rate}
 
 vec_env = DummyVecEnv([make_env(fmu_filename, log, test_learn, start_time, step_size, limitation_coeff, SoC_coeff, BSFC_coeff, NOx_coeff, reward_coeff, state_coeff, alive_reward, 
                                 project, name, config, monitor_dir, i) for i in range(num_cpu)])
@@ -124,50 +144,26 @@ eval_env = DummyVecEnv([lambda: Monitor(env, monitor_dir+f"_eval")])
 # eval_env = VecNormalize(eval_env, norm_obs=True, norm_reward=False, clip_obs=10.0, clip_reward=10.0, gamma=gamma, epsilon=1e-08)
 eval_callback = EvalCallback(eval_env, best_model_save_path=save_dir, log_path=log_dir, eval_freq=stop_time*1000, deterministic=True, render=False)
 
-model = SAC("MlpPolicy", vec_env, buffer_size=buffer_size, learning_starts=learning_starts, ent_coef=ent_coef, 
-            train_freq=(1, "step"), gradient_steps=-1, target_update_interval=1, verbose=verbose, 
-            device=device, batch_size=batch_size, tau=tau, gamma=gamma, learning_rate=learning_rate, tensorboard_log=board_dir)
+# model = SAC("MlpPolicy", vec_env, buffer_size=buffer_size, learning_starts=learning_starts, ent_coef=ent_coef, 
+#             train_freq=(1, "step"), gradient_steps=-1, target_update_interval=1, verbose=verbose, 
+#             device=device, batch_size=batch_size, tau=tau, gamma=gamma, learning_rate=learning_rate, tensorboard_log=board_dir, policy_kwargs=policy_kwargs)
+# model = TD3(TD3Policy, env, learning_rate=learning_rate, buffer_size=buffer_size, learning_starts=learning_starts, batch_size=batch_size,
+#             tau=tau, gamma=gamma, train_freq=train_freq, gradient_steps=gradient_steps, action_noise=action_noise, 
+#             policy_delay=policy_delay, target_policy_noise=target_policy_noise, target_noise_clip=target_noise_clip, stats_window_size=stats_window_size,
+#             verbose=verbose, device=device)
+model = PPO("MlpPolicy", vec_env, learning_rate=learning_rate, n_steps=n_steps, batch_size=batch_size, n_epochs=n_epochs,
+            gamma=gamma, gae_lambda=gae_lambda, clip_range=clip_range, clip_range_vf=clip_range_vf, normalize_advantage=normalize_advantage,
+            ent_coef=ent_coef, vf_coef=vf_coef, max_grad_norm=max_grad_norm, verbose=verbose, device=device)
 # model = RecurrentPPO("MlpLstmPolicy", vec_env, verbose=1, device="cuda", batch_size=batch_size, gamma=gamma, learning_rate=learning_rate)
 if save:
     callbacks = [checkpoint_callback, eval_callback]
 else:
     callbacks = WandbCallback()
-model.learn(total_timesteps = episodes*total_timesteps, callback = callbacks)
+model.learn(total_timesteps = episodes*total_timesteps, callback = callbacks, log_interval=1)
 del model
 
 
-best_model = SAC.load(os.path.join(save_dir, "best_model"))
+best_model = PPO.load(os.path.join(save_dir, "best_model"))
 mean_reward, std_reward = evaluate_policy(best_model, eval_env, n_eval_episodes=10)
 print(f"Mean reward: {mean_reward} +/- {std_reward:.2f}")
 
-
-
-
-
-# state = env.reset()
-# action = np.array([0,0])
-# done = False
-# cum_reward = 0.0
-# a_record = []
-# r_record = []
-# s_record = []
-# t=0
-# while not done:
-#     next_state, reward, done, _, info = env.step(action)
-#     cum_reward += reward
-#     # a_record.append(np.array(action))
-#     r_record.append(reward)
-#     s_record.append(next_state)
-#     state = next_state
-# print(f"total reward: {cum_reward}")
-# s_record = np.array(s_record)
-# print(np.sum(np.log(1 - abs(0.67 - s_record[:,0]))))
-# print(np.sum(0.1*s_record[:,1]))
-# print(np.sum(s_record[:,2]))
-# plt.plot(np.log(1 - abs(0.67 - s_record[:,0])), label='SoC')
-# plt.plot(0.1*s_record[:,1], label='BSFC')
-# plt.plot(s_record[:,2]/100, label='NOx_mgpkm')
-# plt.plot(s_record[:,4], label='NOx_AFT')
-# # plt.plot(r_record)
-# plt.legend(loc='best')
-# plt.show()

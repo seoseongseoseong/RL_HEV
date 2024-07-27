@@ -1,0 +1,53 @@
+{
+    "os": "Windows-10-10.0.22631-SP0",
+    "python": "3.10.9",
+    "heartbeatAt": "2024-06-05T06:23:36.368894",
+    "startedAt": "2024-06-05T06:23:35.385055",
+    "docker": null,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "c:\\Users\\User\\Desktop\\RL_HEV\\sweep\\train.py",
+    "codePathLocal": "train.py",
+    "codePath": "sweep\\train.py",
+    "git": {
+        "remote": "https://github.com/seoseongseoseong/RL_HEV.git",
+        "commit": "213db5fb5b22bb0b898287c6d1db54316cc5f3b2"
+    },
+    "email": "cube1080@snu.ac.kr",
+    "root": "C:/Users/User/Desktop/RL_HEV",
+    "host": "DESKTOP-TVGHHGO",
+    "username": "User",
+    "executable": "C:\\ProgramData\\anaconda3\\envs\\drl\\python.exe",
+    "cpu_count": 24,
+    "cpu_count_logical": 32,
+    "cpu_freq": {
+        "current": 3000.0,
+        "min": 0.0,
+        "max": 3000.0
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 3000.0,
+            "min": 0.0,
+            "max": 3000.0
+        }
+    ],
+    "disk": {
+        "/": {
+            "total": 930.8178062438965,
+            "used": 710.4114456176758
+        }
+    },
+    "gpu": "NVIDIA GeForce RTX 4090",
+    "gpu_count": 1,
+    "gpu_devices": [
+        {
+            "name": "NVIDIA GeForce RTX 4090",
+            "memory_total": 25757220864
+        }
+    ],
+    "memory": {
+        "total": 127.77525329589844
+    }
+}

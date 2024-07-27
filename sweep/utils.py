@@ -64,30 +64,22 @@ torch.cuda.empty_cache()
 
 seed_everything(seed=42)
 
-# import shutil
 
-# shutil.rmtree('wandb')
+import chardet
 
-rList = np.load('rList.npy')
-Q = np.load('Q.npy')
+# 파일의 인코딩을 감지합니다.
+with open('sweep.yaml', 'rb') as file:
+    raw_data = file.read()
+    result = chardet.detect(raw_data)
+    encoding = result['encoding']
 
-plt.plot(rList/1800)
-plt.show()
+# 감지된 인코딩을 사용해 파일을 읽고 UTF-8로 변환합니다.
+with open('sweep.yaml', 'r', encoding=encoding) as file:
+    content = file.read()
 
-# import itertools
-
-# ent_coef_values = ["1e-5", "1e-4", "auto_1e-5", "auto_1e-4"]
-# learning_rate_values = [1e-3, 5e-4, 1e-4]
-# batch_size_values = [2048, 4096, 8192]
-# tau_values = [0.005]
-# gamma_values = [0.99]
-
-# combinations = list(itertools.product(ent_coef_values, learning_rate_values, batch_size_values, tau_values, gamma_values))
-
-# with open("params.txt", "w") as f:
-#     for combo in combinations[:36]:  # Ensure only the first 36 combinations are used
-#         f.write(" ".join(map(str, combo)) + "\n")
-
+# UTF-8 인코딩으로 파일을 다시 저장합니다.
+with open('sweep.yaml', 'w', encoding='utf-8') as file:
+    file.write(content)
 
 # fmu_filename = 'HEV_TMED_Simulator_WLTC_231005_Check.fmu'
 # fmu_name = 'HEV_TMED_Simulator_WLTC_231005_Check'

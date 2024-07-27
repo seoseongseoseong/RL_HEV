@@ -1,0 +1,13 @@
+Traceback (most recent call last):
+  File "C:\ProgramData\anaconda3\envs\drl\lib\site-packages\wandb\sdk\wandb_config.py", line 162, in __getattr__
+    return self.__getitem__(key)
+  File "C:\ProgramData\anaconda3\envs\drl\lib\site-packages\wandb\sdk\wandb_config.py", line 130, in __getitem__
+    return self._items[key]
+KeyError: 'learning_rate'
+The above exception was the direct cause of the following exception:
+Traceback (most recent call last):
+  File "c:\Users\User\Desktop\RL_HEV\sweep\train.py", line 122, in <module>
+    learning_rate=config.learning_rate,
+  File "C:\ProgramData\anaconda3\envs\drl\lib\site-packages\wandb\sdk\wandb_config.py", line 164, in __getattr__
+    raise AttributeError(
+AttributeError: <class 'wandb.sdk.wandb_config.Config'> object has no attribute 'learning_rate'
